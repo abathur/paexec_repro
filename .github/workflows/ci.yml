@@ -1,0 +1,71 @@
+name: "Test"
+on:
+  push:
+
+jobs:
+  download:
+    strategy:
+      matrix:
+        os: [ windows-2022, windows-2025 ]
+      fail-fast: false
+    runs-on: ${{ matrix.os }}
+
+    steps:
+    - name: download paexec
+      run: |
+        curl -sSfL https://www.poweradmin.com/paexec/paexec.exe -o C:\Windows\System32\paexec.exe
+
+    - name: run whoami via paexec
+      run: |
+        whoami
+
+        echo "before paexec"
+
+        paexec -s -to 2 whoami
+
+        echo "after paexec: $LASTEXITCODE"
+
+    - name: dump service events
+      if: always()
+      run: |
+
+        Install-Module -Name PoShEvents -Repository PSGallery -Force
+
+        Import-Module PoShEvents
+
+        (Get-ServiceEvent -Verbose -Since (New-TimeSpan -Minutes 10)).Where({$_.ServiceName -match "PAExec"}) | ConvertTo-Json | Write-Host
+
+  build:
+    strategy:
+      matrix:
+        os: [ windows-2022, windows-2025 ]
+      fail-fast: false
+    runs-on: ${{ matrix.os }}
+
+    steps:
+    - name: Add msbuild to PATH
+      uses: microsoft/setup-msbuild@v2
+
+    - name: clone and build paexec
+      run: |
+        git clone https://github.com/poweradminllc/PAExec
+        cd PAExec
+        msbuild PAExec.vcxproj /p:Configuration=Release
+
+    - name: run whoami via paexec
+      run: |
+        whoami
+
+        echo "before paexec"
+        .\PAExec\Release\PAExec.exe -s -to 2 whoami
+
+        echo "after paexec: $LASTEXITCODE"
+
+    - name: dump service events
+      run: |
+
+        Install-Module -Name PoShEvents -Repository PSGallery -Force
+
+        Import-Module PoShEvents
+
+        (Get-ServiceEvent -Verbose -Since (New-TimeSpan -Minutes 10)).Where({$_.ServiceName -match "PAExec"}) | ConvertTo-Json | Write-Host
